@@ -72,4 +72,4 @@ app.get("/api/trips/:id", async (req, res) => {
 });
 
 // Export for Vercel serverless
-export default app;
+module.exports = app;
