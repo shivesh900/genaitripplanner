@@ -16,8 +16,15 @@ let isConnected = false;
 
 async function connectDB() {
   if (isConnected) return;
+  
+  if (process.env.VERCEL && MONGODB_URI.includes("127.0.0.1")) {
+    throw new Error("Cannot connect to local MongoDB in Vercel. Please set MONGODB_URI.");
+  }
+
   try {
-    await mongoose.connect(MONGODB_URI);
+    await mongoose.connect(MONGODB_URI, {
+      serverSelectionTimeoutMS: 5000, // Timeout after 5s instead of 30s
+    });
     isConnected = true;
     console.log("MongoDB connected successfully");
   } catch (err) {
