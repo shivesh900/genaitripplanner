@@ -1,26 +1,37 @@
 const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
-const Trip = require("./models/Trip");
+const Trip = require("../models/Trip");
 
 const app = express();
-const PORT = 5000;
 
 // Middleware
 app.use(cors());
 app.use(express.json());
 
-// MongoDB Connection
-mongoose
-  .connect("mongodb://127.0.0.1:27017/ai-trip-planner")
-  .then(() => console.log("MongoDB connected successfully"))
-  .catch((err) => console.error("MongoDB connection error:", err));
+// MongoDB Connection (uses MONGODB_URI env variable for Atlas)
+const MONGODB_URI = process.env.MONGODB_URI || "mongodb://127.0.0.1:27017/ai-trip-planner";
+
+let isConnected = false;
+
+async function connectDB() {
+  if (isConnected) return;
+  try {
+    await mongoose.connect(MONGODB_URI);
+    isConnected = true;
+    console.log("MongoDB connected successfully");
+  } catch (err) {
+    console.error("MongoDB connection error:", err);
+    throw err;
+  }
+}
 
 // ==================== API Routes ====================
 
-// POST /trips → Add a new trip
-app.post("/trips", async (req, res) => {
+// POST /api/trips → Add a new trip
+app.post("/api/trips", async (req, res) => {
   try {
+    await connectDB();
     const { destination, budget, startDate, endDate, preferences } = req.body;
     const newTrip = new Trip({ destination, budget, startDate, endDate, preferences });
     const savedTrip = await newTrip.save();
@@ -30,9 +41,10 @@ app.post("/trips", async (req, res) => {
   }
 });
 
-// GET /trips → Get all trips
-app.get("/trips", async (req, res) => {
+// GET /api/trips → Get all trips
+app.get("/api/trips", async (req, res) => {
   try {
+    await connectDB();
     const trips = await Trip.find().sort({ _id: -1 });
     res.json(trips);
   } catch (error) {
@@ -40,9 +52,10 @@ app.get("/trips", async (req, res) => {
   }
 });
 
-// GET /trips/:id → Get a single trip by ID
-app.get("/trips/:id", async (req, res) => {
+// GET /api/trips/:id → Get a single trip by ID
+app.get("/api/trips/:id", async (req, res) => {
   try {
+    await connectDB();
     // Validate that the ID is a valid MongoDB ObjectId
     if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
       return res.status(400).json({ message: "Invalid trip ID format" });
@@ -58,7 +71,5 @@ app.get("/trips/:id", async (req, res) => {
   }
 });
 
-// Start Server
-app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
-});
+// Export for Vercel serverless
+export default app;

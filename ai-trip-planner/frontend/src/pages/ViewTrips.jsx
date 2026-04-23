@@ -9,7 +9,7 @@ function ViewTrips() {
   useEffect(() => {
     const fetchTrips = async () => {
       try {
-        const res = await axios.get("http://localhost:5000/trips");
+        const res = await axios.get("/api/trips");
         setTrips(res.data);
       } catch (error) {
         console.error("Error fetching trips:", error);

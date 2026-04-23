@@ -36,7 +36,7 @@ function TripDetails() {
   useEffect(() => {
     const fetchTrip = async () => {
       try {
-        const res = await axios.get(`http://localhost:5000/trips/${id}`);
+        const res = await axios.get(`/api/trips/${id}`);
         setTrip(res.data);
       } catch (error) {
         console.error("Error fetching trip:", error);

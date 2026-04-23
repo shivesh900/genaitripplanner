@@ -27,7 +27,7 @@ function AddTrip() {
     }
 
     try {
-      await axios.post("http://localhost:5000/trips", {
+      await axios.post("/api/trips", {
         ...formData,
         budget: Number(formData.budget),
       });
