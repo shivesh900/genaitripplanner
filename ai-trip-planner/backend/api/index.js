@@ -35,6 +35,10 @@ async function connectDB() {
 
 // ==================== API Routes ====================
 
+app.get("/api/test", (req, res) => {
+  res.json({ message: "Backend working 🚀" });
+});
+
 // POST /api/trips → Add a new trip
 app.post("/api/trips", async (req, res) => {
   try {
