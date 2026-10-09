@@ -1,26 +1,25 @@
 const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
+const crypto = require("crypto");
 const Trip = require("../models/Trip");
 
 const app = express();
 
 // Middleware
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: "2mb" }));
 
-// MongoDB Connection (uses MONGODB_URI env variable for Atlas)
-const MONGODB_URI = process.env.MONGODB_URI || "mongodb://127.0.0.1:27017/ai-trip-planner";
+// Storage: MongoDB when MONGODB_URI is set (e.g. Atlas), otherwise an in-memory
+// store so the API always works for demos and tests (data resets on restart).
+const MONGODB_URI = process.env.MONGODB_URI || "";
+const useMongo = Boolean(MONGODB_URI);
+const memory = new Map();
 
 let isConnected = false;
 
 async function connectDB() {
-  if (isConnected) return;
-  
-  if (process.env.VERCEL && MONGODB_URI.includes("127.0.0.1")) {
-    throw new Error("Cannot connect to local MongoDB in Vercel. Please set MONGODB_URI.");
-  }
-
+  if (!useMongo || isConnected) return;
   try {
     await mongoose.connect(MONGODB_URI, {
       serverSelectionTimeoutMS: 5000, // Timeout after 5s instead of 30s
@@ -33,19 +32,37 @@ async function connectDB() {
   }
 }
 
+const FIELDS = ["destination", "budget", "startDate", "endDate", "preferences", "travellers", "interests", "pace", "plan", "writeUp"];
+const pick = (body) => Object.fromEntries(FIELDS.filter((k) => body[k] !== undefined).map((k) => [k, body[k]]));
+
+function validate(t) {
+  if (!t.destination || !String(t.destination).trim()) return "destination is required";
+  if (!(Number(t.budget) > 0)) return "budget must be a positive number";
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(t.startDate || "") || !/^\d{4}-\d{2}-\d{2}$/.test(t.endDate || "")) return "startDate and endDate must be YYYY-MM-DD";
+  if (t.endDate < t.startDate) return "endDate is before startDate";
+  return null;
+}
+
 // ==================== API Routes ====================
 
 app.get("/api/test", (req, res) => {
-  res.json({ message: "Backend working 🚀" });
+  res.json({ message: "Backend working 🚀", storage: useMongo ? "mongodb" : "memory" });
 });
 
 // POST /api/trips → Add a new trip
 app.post("/api/trips", async (req, res) => {
   try {
+    const data = pick(req.body || {});
+    const problem = validate(data);
+    if (problem) return res.status(400).json({ message: problem });
+    data.budget = Number(data.budget);
+    if (!useMongo) {
+      const trip = { ...data, _id: crypto.randomUUID(), createdAt: new Date().toISOString() };
+      memory.set(trip._id, trip);
+      return res.status(201).json(trip);
+    }
     await connectDB();
-    const { destination, budget, startDate, endDate, preferences } = req.body;
-    const newTrip = new Trip({ destination, budget, startDate, endDate, preferences });
-    const savedTrip = await newTrip.save();
+    const savedTrip = await new Trip(data).save();
     res.status(201).json(savedTrip);
   } catch (error) {
     res.status(500).json({ message: "Error creating trip", error: error.message });
@@ -55,6 +72,7 @@ app.post("/api/trips", async (req, res) => {
 // GET /api/trips → Get all trips
 app.get("/api/trips", async (req, res) => {
   try {
+    if (!useMongo) return res.json([...memory.values()].reverse());
     await connectDB();
     const trips = await Trip.find().sort({ _id: -1 });
     res.json(trips);
@@ -63,22 +81,59 @@ app.get("/api/trips", async (req, res) => {
   }
 });
 
+async function findTrip(id) {
+  if (!useMongo) return memory.get(id) || null;
+  await connectDB();
+  if (!mongoose.Types.ObjectId.isValid(id)) return undefined;
+  return Trip.findById(id);
+}
+
 // GET /api/trips/:id → Get a single trip by ID
 app.get("/api/trips/:id", async (req, res) => {
   try {
-    await connectDB();
-    // Validate that the ID is a valid MongoDB ObjectId
-    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
-      return res.status(400).json({ message: "Invalid trip ID format" });
-    }
-
-    const trip = await Trip.findById(req.params.id);
-    if (!trip) {
-      return res.status(404).json({ message: "Trip not found" });
-    }
+    const trip = await findTrip(req.params.id);
+    if (trip === undefined) return res.status(400).json({ message: "Invalid trip ID format" });
+    if (!trip) return res.status(404).json({ message: "Trip not found" });
     res.json(trip);
   } catch (error) {
     res.status(500).json({ message: "Error fetching trip", error: error.message });
+  }
+});
+
+// PATCH /api/trips/:id → Save a generated plan / AI write-up
+app.patch("/api/trips/:id", async (req, res) => {
+  try {
+    const patch = pick(req.body || {});
+    if (!useMongo) {
+      const trip = memory.get(req.params.id);
+      if (!trip) return res.status(404).json({ message: "Trip not found" });
+      const updated = { ...trip, ...patch };
+      memory.set(trip._id, updated);
+      return res.json(updated);
+    }
+    await connectDB();
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) return res.status(400).json({ message: "Invalid trip ID format" });
+    const trip = await Trip.findByIdAndUpdate(req.params.id, patch, { new: true });
+    if (!trip) return res.status(404).json({ message: "Trip not found" });
+    res.json(trip);
+  } catch (error) {
+    res.status(500).json({ message: "Error updating trip", error: error.message });
+  }
+});
+
+// DELETE /api/trips/:id
+app.delete("/api/trips/:id", async (req, res) => {
+  try {
+    if (!useMongo) {
+      memory.delete(req.params.id);
+      return res.status(204).end();
+    }
+    await connectDB();
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) return res.status(400).json({ message: "Invalid trip ID format" });
+    await Trip.findByIdAndDelete(req.params.id);
+    res.status(204).end();
+  } catch (error) {
+    res.status(500).json({ message: "Error deleting trip", error: error.message });
   }
 });
 
