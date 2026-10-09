@@ -9,6 +9,8 @@ try, local tips) with one tap. **No API key or paid service is needed** for the 
 
 ![AI Trip Planner](docs/screenshot.jpg)
 
+![Day-by-day plan with live weather and an AI tip](docs/day-by-day.jpg)
+
 ## How it works
 
 ```mermaid
