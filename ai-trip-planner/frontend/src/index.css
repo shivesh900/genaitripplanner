@@ -765,4 +765,7 @@ a.stop-title:hover { text-decoration: underline; }
   .navbar-links a { padding: 8px 10px; }
   .detail-banner, .detail-body { padding: 1.2rem; }
   .detail-banner h1 { font-size: 1.6rem; }
+  .stop { grid-template-columns: 64px 1fr; }
+  .stop img, .stop-img-ph { width: 64px; height: 52px; }
+  .stop p { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 }
