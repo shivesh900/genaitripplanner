@@ -3,7 +3,8 @@ import react from '@vitejs/plugin-react'
 
 // https://vite.dev/config/
 export default defineConfig({
-  base: "/",
+  // Relative asset paths: the same build works on GitHub Pages (/genaitripplanner/) and on Vercel (/).
+  base: "./",
   plugins: [react()],
   server: {
     proxy: {
